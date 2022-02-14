@@ -39,9 +39,11 @@ class SpeechBaseTask(BaseTask):
         self.vocoder = None
         data_dir = hparams['binary_data_dir']
         if not hparams['use_word_input']:
-            self.token_encoder = build_token_encoder(f'{data_dir}/phone_set.json')
+            self.token_encoder = build_token_encoder(
+                f'{data_dir}/phone_set.json')
         else:
-            self.token_encoder = build_token_encoder(f'{data_dir}/word_set.json')
+            self.token_encoder = build_token_encoder(
+                f'{data_dir}/word_set.json')
         self.padding_idx = self.token_encoder.pad()
         self.eos_idx = self.token_encoder.eos()
         self.seg_idx = self.token_encoder.seg()
@@ -49,7 +51,7 @@ class SpeechBaseTask(BaseTask):
         self.saving_results_futures = None
         self.mel_losses = parse_mel_losses()
         self.max_tokens, self.max_sentences, \
-        self.max_valid_tokens, self.max_valid_sentences = parse_dataset_configs()
+            self.max_valid_tokens, self.max_valid_sentences = parse_dataset_configs()
 
     ##########################
     # datasets
@@ -74,19 +76,22 @@ class SpeechBaseTask(BaseTask):
             train_dataset = BaseConcatDataset([
                 self.dataset_cls(prefix='train', shuffle=True, data_dir=ds_name) for ds_name in train_sets])
         else:
-            train_dataset = self.dataset_cls(prefix=hparams['train_set_name'], shuffle=True)
+            train_dataset = self.dataset_cls(
+                prefix=hparams['train_set_name'], shuffle=True)
         return self.build_dataloader(train_dataset, True, self.max_tokens, self.max_sentences,
                                      endless=hparams['endless_ds'])
 
     @data_loader
     def val_dataloader(self):
-        valid_dataset = self.dataset_cls(prefix=hparams['valid_set_name'], shuffle=False)
+        valid_dataset = self.dataset_cls(
+            prefix=hparams['valid_set_name'], shuffle=False)
         return self.build_dataloader(valid_dataset, False, self.max_valid_tokens, self.max_valid_sentences,
                                      batch_by_size=False)
 
     @data_loader
     def test_dataloader(self):
-        test_dataset = self.dataset_cls(prefix=hparams['test_set_name'], shuffle=False)
+        test_dataset = self.dataset_cls(
+            prefix=hparams['test_set_name'], shuffle=False)
         self.test_dl = self.build_dataloader(
             test_dataset, False, self.max_valid_tokens, self.max_valid_sentences, batch_by_size=False)
         return self.test_dl
@@ -121,7 +126,8 @@ class SpeechBaseTask(BaseTask):
         if shuffle:
             batches = shuffle_batches(list(batch_sampler))
             if endless:
-                batches = [b for _ in range(1000) for b in shuffle_batches(list(batch_sampler))]
+                batches = [b for _ in range(
+                    1000) for b in shuffle_batches(list(batch_sampler))]
         else:
             batches = batch_sampler
             if endless:
@@ -130,7 +136,8 @@ class SpeechBaseTask(BaseTask):
         if self.trainer.use_ddp:
             num_replicas = dist.get_world_size()
             rank = dist.get_rank()
-            batches = [x[rank::num_replicas] for x in batches if len(x) % num_replicas == 0]
+            batches = [x[rank::num_replicas]
+                       for x in batches if len(x) % num_replicas == 0]
         return torch.utils.data.DataLoader(dataset,
                                            collate_fn=dataset.collater,
                                            batch_sampler=batches,
@@ -165,7 +172,8 @@ class SpeechBaseTask(BaseTask):
         self.optimizer = optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=hparams['lr'],
-            betas=(hparams['optimizer_adam_beta1'], hparams['optimizer_adam_beta2']),
+            betas=(hparams['optimizer_adam_beta1'],
+                   hparams['optimizer_adam_beta2']),
             weight_decay=hparams['weight_decay'])
 
         return optimizer
@@ -175,7 +183,8 @@ class SpeechBaseTask(BaseTask):
     ##########################
     def _training_step(self, sample, batch_idx, _):
         loss_output, _ = self.run_model(sample)
-        total_loss = sum([v for v in loss_output.values() if isinstance(v, torch.Tensor) and v.requires_grad])
+        total_loss = sum([v for v in loss_output.values()
+                         if isinstance(v, torch.Tensor) and v.requires_grad])
         loss_output['batch_size'] = sample['txt_tokens'].size()[0]
         return total_loss, loss_output
 
@@ -219,7 +228,8 @@ class SpeechBaseTask(BaseTask):
     ##########################
     def add_mel_loss(self, mel_out, target, losses, postfix=''):
         for loss_name, lambd in self.mel_losses.items():
-            losses[f'{loss_name}{postfix}'] = getattr(self, f'{loss_name}_loss')(mel_out, target) * lambd
+            losses[f'{loss_name}{postfix}'] = getattr(
+                self, f'{loss_name}_loss')(mel_out, target) * lambd
 
     def l1_loss(self, decoder_output, target):
         # decoder_output : B x T x n_mel
@@ -277,7 +287,8 @@ class SpeechBaseTask(BaseTask):
     # testing
     ##########################
     def test_start(self):
-        self.saving_result_pool = MultiprocessManager(int(os.getenv('N_PROC', os.cpu_count())))
+        self.saving_result_pool = MultiprocessManager(
+            int(os.getenv('N_PROC', os.cpu_count())))
         self.saving_results_futures = []
         self.gen_dir = os.path.join(
             hparams['work_dir'], f'generated_{self.trainer.global_step}_{hparams["gen_dir_name"]}')
@@ -339,12 +350,14 @@ class SpeechBaseTask(BaseTask):
             plt.plot(f0, c='white', linewidth=1, alpha=0.6)
             if mel2ph is not None and str_phs is not None:
                 decoded_txt = str_phs.split(" ")
-                dur = mel2token_to_dur(torch.LongTensor(mel2ph)[None, :], len(decoded_txt))[0].numpy()
+                dur = mel2token_to_dur(torch.LongTensor(
+                    mel2ph)[None, :], len(decoded_txt))[0].numpy()
                 dur = [0] + list(np.cumsum(dur))
                 for i in range(len(dur) - 1):
                     shift = (i % 20) + 1
                     plt.text(dur[i], shift, decoded_txt[i])
-                    plt.hlines(shift, dur[i], dur[i + 1], colors='b' if decoded_txt[i] != '|' else 'black')
+                    plt.hlines(
+                        shift, dur[i], dur[i + 1], colors='b' if decoded_txt[i] != '|' else 'black')
                     plt.vlines(dur[i], 0, 5, colors='b' if decoded_txt[i] != '|' else 'black',
                                alpha=1, linewidth=1)
             plt.tight_layout()
@@ -360,7 +373,8 @@ class SpeechBaseTask(BaseTask):
                 ax.set_yticks(np.arange(len(decoded_txt)))
                 ax.set_yticklabels(list(decoded_txt), fontsize=6)
                 fig.colorbar(im, ax=ax)
-                fig.savefig(f'{gen_dir}/attn_plot/{base_fn}_attn.png', format='png')
+                fig.savefig(
+                    f'{gen_dir}/attn_plot/{base_fn}_attn.png', format='png')
                 plt.close(fig)
         except Exception:
             traceback.print_exc()
